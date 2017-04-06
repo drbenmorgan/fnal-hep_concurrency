@@ -1,0 +1,27 @@
+parent hep_concurrency v0_01_00
+defaultqual e14
+#
+incdir fq_dir include
+libdir	fq_dir lib
+
+# define product/version pairs
+product	version
+cppunit         v1_13_1c        e14
+gcc		v6_3_0		e14
+tbb             v2017_3c
+cetbuildtools	v5_06_07	-	only_for_build
+end_product_list
+
+
+# Matrix of qualifiers versus dependent products
+qualifier	cppunit    gcc	tbb        compiler	notes
+e14:debug	e14:debug  -nq-	e14:debug  gcc
+e14:opt		e14:opt    -nq-	e14:opt    gcc
+e14:prof	e14:prof   -nq-	e14:prof   gcc
+end_qualifier_list
+
+# Local Variables:
+# tab-width: 8
+# End:
+
+# vi:set ts=8 noexpandtab:
