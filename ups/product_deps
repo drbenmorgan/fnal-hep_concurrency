@@ -6,7 +6,7 @@ libdir	fq_dir lib
 
 # define product/version pairs
 product	version
-cppunit         v1_13_1c        e14
+cppunit         v1_13_2         e14
 gcc		v6_3_0		e14
 tbb             v2017_7
 cetbuildtools	v5_10_00	-	only_for_build
