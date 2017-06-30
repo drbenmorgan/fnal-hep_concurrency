@@ -8,8 +8,8 @@ libdir	fq_dir lib
 product	version
 cppunit         v1_13_1c        e14
 gcc		v6_3_0		e14
-tbb             v2017_3c
-cetbuildtools	v5_06_07	-	only_for_build
+tbb             v2017_7
+cetbuildtools	v5_10_00	-	only_for_build
 end_product_list
 
 
