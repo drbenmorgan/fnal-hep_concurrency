@@ -201,8 +201,8 @@ void WaitingTaskList_test::stressTest()
    std::exception_ptr excPtr;
    hep::concurrency::WaitingTaskList waitList;
 
-   unsigned int index = 1000;
-   const unsigned int nTasks = 10000;
+   unsigned int index = 10;
+   const unsigned int nTasks = 100;
    while(0 != --index) {
       called = false;
       auto waitTask = hep::concurrency::make_empty_waiting_task();

@@ -2,7 +2,7 @@
 # test_threadSafeOutputFileStream.cpp
 include(CetTest)
 
-set(source_libraries pthread ${CPPUNIT} ${TBB} hep_concurrency)
+set(source_libraries hep_concurrency ${CPPUNIT} ${TBB} pthread)
 
 cet_make_exec(ThreadSafeOutputFileStream_t LIBRARIES pthread hep_concurrency)
 cet_test(runThreadSafeOutputFileStream_t.sh PREBUILT)

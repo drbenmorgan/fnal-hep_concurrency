@@ -26,7 +26,8 @@
 
 // forward declarations
 
-namespace hep::concurrency {
+namespace hep {
+namespace concurrency {
   class WaitingTaskHolder
   {
     
@@ -79,6 +80,7 @@ namespace hep::concurrency {
     // ---------- member data --------------------------------
     WaitingTask* m_task;
   };
-}
+} // namespace concurrency
+} // namespace hep
 
 #endif /* hep_concurrency_WaitingTaskHolder_h */

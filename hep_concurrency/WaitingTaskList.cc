@@ -139,9 +139,15 @@ WaitingTaskList::announce()
       hardware_pause();
     }
     auto t = n->m_task;
-    if(m_exceptionPtr) {
+    // Note: This was a mistake, the operator bool of
+    // m_exceptionPtr will return false if the exception_ptr
+    // contained exception* is the nullptr.  So even if
+    // doneWaiting(exception_ptr()) had been called, we
+    // would not set the exception_ptr* member of the
+    // task.
+    //if(m_exceptionPtr) {
       t->dependentTaskFailed(m_exceptionPtr);
-    }
+    //}
     if(0==t->decrement_ref_count()){
       tbb::task::spawn(*t);
     }
