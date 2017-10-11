@@ -1,3 +1,6 @@
+if(ALT_CMAKE)
+  include(altCMakeLists.cmake)
+else()
 # run_threadSafeOutputFileStream_test.sh
 # test_threadSafeOutputFileStream.cpp
 include(CetTest)
@@ -9,3 +12,4 @@ cet_test(runThreadSafeOutputFileStream_t.sh PREBUILT)
 cet_test(serialtaskqueuechain_t LIBRARIES ${source_libraries})
 cet_test(serialtaskqueue_t LIBRARIES ${source_libraries})
 cet_test(waitingtasklist_t LIBRARIES ${source_libraries})
+endif() # ALT_CMAKE
