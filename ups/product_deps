@@ -10,7 +10,7 @@ product	version
 cppunit         v1_13_2a
 gcc		v6_3_0		e14
 gcc		v6_4_0		e15
-tbb             v2018
+tbb             v2018_1
 cetbuildtools	v6_00_01	-	only_for_build
 end_product_list
 
