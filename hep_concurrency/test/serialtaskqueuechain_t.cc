@@ -220,7 +220,7 @@ stressTest()
   // Note: This is 30,000 ticks == 30 s
   unsigned const maxCountingTicks =  30'000U;
   auto stressFunctor =
-    [nTasks, &chain, &waitToStart, countingTick, maxCountingTicks, &count_stress_tasks, &count_stress]()
+    [&chain, &waitToStart, &count_stress_tasks, &count_stress]()
     {
       ++count_stress_tasks;
       {
@@ -246,7 +246,7 @@ stressTest()
     count_stress.store(0U);
     //cerr << "Creating the_thread ..." << endl;
     thread the_thread(
-      [nTasks, &chain, &waitToStart, &count_stress_tasks, &count_stress]() {
+      [&chain, &waitToStart, &count_stress_tasks, &count_stress]() {
         ++count_stress_tasks;
         {
           auto waitCount = 0U;
