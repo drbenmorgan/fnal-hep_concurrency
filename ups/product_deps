@@ -8,7 +8,6 @@ fcldir -
 # define product/version pairs
 product	version
 cppunit         v1_13_2c
-gcc		v6_3_0		e14
 gcc		v6_4_0		e15
 gcc		v7_3_0		e17
 clang           v5_0_1          c2
