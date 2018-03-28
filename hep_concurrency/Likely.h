@@ -2,7 +2,7 @@
 #define hep_concurrency_Likely_h
 #include "hep_concurrency/GCCPrerequisite.h"
 
-#if GCC_PREREQUISITE(3,0,0)
+#if GCC_PREREQUISITE(3, 0, 0)
 
 #if defined(NO_LIKELY)
 #define likely(x) (x)

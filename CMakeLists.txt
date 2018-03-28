@@ -35,13 +35,12 @@ cet_set_compiler_flags(DIAGS VIGILANT
   EXTRA_FLAGS -pedantic
   EXTRA_CXX_FLAGS -Wnon-virtual-dtor -Wdelete-non-virtual-dtor
   )
-set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -DTBB_USE_DEBUG=1")
 cet_report_compiler_flags()
 
 # ----------------------------------------------------------------------
 # Describe build prerequisites:
 
-find_ups_product(cetbuildtools v4_14_01)
+find_ups_product(cetbuildtools v6_00_00)
 find_ups_product(cppunit)
 find_ups_product(tbb)
 

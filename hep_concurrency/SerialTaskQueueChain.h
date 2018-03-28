@@ -1,168 +1,101 @@
 #ifndef hep_concurrency_SerialTaskQueueChain_h
 #define hep_concurrency_SerialTaskQueueChain_h
-// -*- C++ -*-
-//
-// Package:     FWCore/Concurrency
-// Class  :     SerialTaskQueueChain
-//
-/**\class SerialTaskQueueChain SerialTaskQueueChain.h "SerialTaskQueueChain.h"
+// vim: set sw=2 expandtab :
 
- Description: [one line class summary]
+#include "hep_concurrency/RecursiveMutex.h"
+#include "hep_concurrency/SerialTaskQueue.h"
 
- Usage:
-    <usage>
-
-*/
-//
-// Original Author:  root
-//         Created:  Mon, 15 Aug 2016 18:04:02 GMT
-//
-
-// system include files
+#include <atomic>
 #include <cassert>
+#include <exception>
 #include <memory>
 #include <vector>
 
-// user include files
-#include "hep_concurrency/SerialTaskQueue.h"
-
-// forward declarations
 namespace hep {
   namespace concurrency {
 
-    class SerialTaskQueueChain
-    {
-
-    public:
-      SerialTaskQueueChain() {}
-      explicit SerialTaskQueueChain(std::vector<std::shared_ptr<SerialTaskQueue>> iQueues):
-        m_queues(std::move(iQueues)) {}
-
-      SerialTaskQueueChain(const SerialTaskQueueChain&) = delete;
-      SerialTaskQueueChain& operator=(const SerialTaskQueueChain&) = delete;
-      SerialTaskQueueChain(SerialTaskQueueChain&& iOld):
-        m_queues(std::move(iOld.m_queues)),
-        m_outstandingTasks{ iOld.m_outstandingTasks.load() } {}
-
-      SerialTaskQueueChain& operator=(SerialTaskQueueChain&& iOld) {
-        m_queues = std::move(iOld.m_queues);
-        m_outstandingTasks.store( iOld.m_outstandingTasks.load());
-        return *this;
-      }
-
-
-
-      /// asynchronously pushes functor iAction into queue
-      /**
-       * The function will return immediately and iAction will either
-       * process concurrently with the calling thread or wait until the
-       * protected resource becomes available or until a CPU becomes available.
-       * \param[in] iAction Must be a functor that takes no arguments and return no values.
-       */
-      template<typename T>
-      void push(const T& iAction);
-
-      /// synchronously pushes functor iAction into queue
-      /**
-       * The function will wait until iAction has completed before returning.
-       * If another task is already running on the queue, the system is allowed
-       * to find another TBB task to execute while waiting for the iAction to finish.
-       * In that way the core is not idled while waiting.
-       * \param[in] iAction Must be a functor that takes no arguments and return no values.
-       */
-      template<typename T>
-      void pushAndWait(const T& iAction);
-
-      unsigned long outstandingTasks() const { return m_outstandingTasks; }
-      std::size_t numberOfQueues() const {return m_queues.size(); }
+    class SerialTaskQueueChain {
+      // Data Members
     private:
-
-      // ---------- member data --------------------------------
-      std::vector<std::shared_ptr<SerialTaskQueue>> m_queues;
-      std::atomic<unsigned long> m_outstandingTasks{0};
-
-      template<typename T>
-      void passDownChain(unsigned int iIndex, const T& iAction);
-
-      template<typename T>
-      void actionToRun(const T& iAction);
-
+      // Protects all data members
+      hep::concurrency::RecursiveMutex mutex_{"SerialTaskQueueChain::mutex_"};
+      // The queues
+      std::vector<std::shared_ptr<SerialTaskQueue>> queues_;
+      // Implementation Details
+    private:
+      template <typename T>
+      void passDown(unsigned int, const T&);
+      template <typename T>
+      void runFunc(const T&);
+      // Special Member Functions
+    public:
+      ~SerialTaskQueueChain();
+      SerialTaskQueueChain();
+      explicit SerialTaskQueueChain(
+        std::vector<std::shared_ptr<SerialTaskQueue>>);
+      SerialTaskQueueChain(SerialTaskQueueChain const&) = delete;
+      SerialTaskQueueChain(SerialTaskQueueChain&&);
+      SerialTaskQueueChain& operator=(SerialTaskQueueChain const&) = delete;
+      SerialTaskQueueChain& operator=(SerialTaskQueueChain&&);
+      // API
+    public:
+      template <typename T>
+      void push(T const&);
     };
 
-    template<typename T>
-    void SerialTaskQueueChain::push(const T& iAction) {
-      ++m_outstandingTasks;
-      if(m_queues.size() == 1) {
-        m_queues[0]->push( [this,iAction]() {this->actionToRun(iAction);} );
+    template <typename T>
+    void
+    SerialTaskQueueChain::push(T const& func)
+    {
+      hep::concurrency::RecursiveMutexSentry sentry{mutex_, __func__};
+      assert(queues_.size() > 0);
+      if (queues_.size() == 1) {
+        // The mutable is *not* optional, the c++ standard requires this!
+        queues_[0]->push([this, func]() mutable { runFunc(func); });
       } else {
-        assert(m_queues.size()>0);
-        m_queues[0]->push([this, iAction]() {
-            this->passDownChain(1, iAction);
-          });
+        // The mutable is *not* optional, the c++ standard requires this!
+        queues_[0]->push([this, func]() mutable { passDown(1, func); });
       }
     }
 
-    template<typename T>
-    void SerialTaskQueueChain::pushAndWait(const T& iAction) {
-      auto destry = [](tbb::task* iTask) { tbb::task::destroy(*iTask); };
-
-      std::unique_ptr<tbb::task, decltype(destry)> waitTask( new (tbb::task::allocate_root()) tbb::empty_task, destry );
-      waitTask->set_ref_count(3);
-
-      std::exception_ptr ptr;
-      auto waitTaskPtr = waitTask.get();
-      push([waitTaskPtr, iAction,&ptr](){
-          //must wait until exception ptr would be set
-          auto dec = [](tbb::task* iTask){ iTask->decrement_ref_count();};
-          std::unique_ptr<tbb::task, decltype(dec)> sentry(waitTaskPtr,dec);
-          try {
-            iAction();
-          }catch(...) {
-            ptr = std::current_exception();
-          }
-        });
-
-      waitTask->decrement_ref_count();
-      waitTask->wait_for_all();
-
-      if(ptr) {
-        std::rethrow_exception(ptr);
-      }
-    }
-
-    template<typename T>
-    void SerialTaskQueueChain::passDownChain(unsigned int iQueueIndex, const T& iAction) {
-      //Have to be sure the queue associated to this running task
-      // does not attempt to start another task
-      m_queues[iQueueIndex-1]->pause();
-      //is this the last queue?
-      if(iQueueIndex +1 == m_queues.size()) {
-        m_queues[iQueueIndex]->push([this,iAction]{ this->actionToRun(iAction); });
+    template <typename T>
+    void
+    SerialTaskQueueChain::passDown(unsigned int idx, T const& func)
+    {
+      hep::concurrency::RecursiveMutexSentry sentry{mutex_, __func__};
+      queues_[idx - 1]->pause();
+      if ((idx + 1) == queues_.size()) {
+        // The mutable is *not* optional, the c++ standard requires this!
+        queues_[idx]->push([this, func]() mutable { runFunc(func); });
       } else {
-        auto nextQueue = iQueueIndex+1;
-        m_queues[iQueueIndex]->push([this, nextQueue, iAction]() {
-            this->passDownChain(nextQueue, iAction);
-          });
+        auto nxt = idx + 1;
+        // The mutable is *not* optional, the c++ standard requires this!
+        queues_[idx]->push(
+          [this, nxt, func]() mutable { passDown(nxt, func); });
       }
     }
 
-    template<typename T>
-    void SerialTaskQueueChain::actionToRun(const T& iAction) {
-      //even if an exception happens we will resume the queues.
-      using Queues= std::vector<std::shared_ptr<SerialTaskQueue>>;
-      auto sentryAction = [](SerialTaskQueueChain* iChain) {
-        auto& vec = iChain->m_queues;
-        for(auto it = vec.rbegin()+1; it != vec.rend(); ++it) {
-          (*it)->resume();
+    template <typename T>
+    void
+    SerialTaskQueueChain::runFunc(const T& func)
+    {
+      try {
+        func();
+      }
+      catch (...) {
+        hep::concurrency::RecursiveMutexSentry sentry{mutex_, __func__};
+        for (auto I = queues_.rbegin() + 1; I != queues_.rend(); ++I) {
+          (*I)->resume();
         }
-        --(iChain->m_outstandingTasks);
-      };
-
-      std::unique_ptr<SerialTaskQueueChain,decltype(sentryAction)> sentry( this, sentryAction);
-      iAction();
+        throw;
+      }
+      hep::concurrency::RecursiveMutexSentry sentry{mutex_, __func__};
+      for (auto I = queues_.rbegin() + 1; I != queues_.rend(); ++I) {
+        (*I)->resume();
+      }
     }
 
-  } // concurrency
-} // hep
+  } // namespace concurrency
+} // namespace hep
 
 #endif /* hep_concurrency_SerialTaskQueueChain_h */

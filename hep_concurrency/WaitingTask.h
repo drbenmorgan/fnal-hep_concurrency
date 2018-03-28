@@ -1,96 +1,125 @@
 #ifndef hep_concurrency_WaitingTask_h
 #define hep_concurrency_WaitingTask_h
-// -*- C++ -*-
-//
-// Package:     Concurrency
-// Class  :     WaitingTask
-//
-/**\class WaitingTask WaitingTask.h hep_concurrency/WaitingTask.h
+// vim: set sw=2 expandtab :
 
-   Description: Task used by WaitingTaskList.
+#include "tbb/task.h"
 
-   Usage:
-   Used as a callback to happen after a task has been completed. Includes the ability to hold an exception which has occurred while waiting.
-*/
-//
-// Original Author:  Chris Jones
-//         Created:  Thu Feb 21 13:46:31 CST 2013
-// $Id$
-//
-
-// system include files
 #include <atomic>
 #include <exception>
 #include <memory>
-#include "tbb/task.h"
-
-// user include files
-
-// forward declarations
 
 namespace hep {
   namespace concurrency {
 
-    class WaitingTaskList;
-    class WaitingTaskHolder;
+    using WaitingTask = tbb::task;
 
-    class WaitingTask : public tbb::task {
+    // Used for hiding the FunctorWaitingTask ctor vptr adjustment.
+    extern std::atomic<bool> functorWaitingTaskExternalSync_;
 
-    public:
-      friend class WaitingTaskList;
-      friend class WaitingTaskHolder;
+    // Used for hiding the FunctorWaitingTask ctor vptr adjustment.
+    inline void
+    functorWaitingTaskStartSync()
+    {
+      // functorWaitingTaskExternalSync_.store(true, std::memory_order_release);
+    }
 
-      ///Constructor
-      WaitingTask() : m_ptr{nullptr} {}
-      ~WaitingTask() override {
-        delete m_ptr.load();
-      };
+    // Used for hiding the FunctorWaitingTask ctor vptr adjustment.
+    inline void
+    functorWaitingTaskFinishSync()
+    {
+      // functorWaitingTaskExternalSync_.load(std::memory_order_acquire);
+    }
 
-      // ---------- const member functions ---------------------------
+    class WaitingTaskExHolder {
 
-      ///Returns exception thrown by dependent task
-      /** If the value is non-null then the dependent task failed.
-       */
-      std::exception_ptr const * exceptionPtr() const {
-        return m_ptr.load();
-      }
+      // Data Members
     private:
-
-      ///Called if waited for task failed
-      /**Allows transfer of the exception caused by the dependent task to be
-       * moved to another thread.
-       * This method should only be called by WaitingTaskList
-       */
-      void dependentTaskFailed(std::exception_ptr iPtr) {
-        if (iPtr and not m_ptr) {
-          auto temp = std::make_unique<std::exception_ptr>(iPtr);
-          std::exception_ptr* expected = nullptr;
-          if( m_ptr.compare_exchange_strong(expected, temp.get()) ) {
-            temp.release();
-          }
-        }
-      }
-
       std::atomic<std::exception_ptr*> m_ptr;
-    };
 
-    template<typename F>
-    class FunctorWaitingTask : public WaitingTask {
+      // Special Member Functions
     public:
-      explicit FunctorWaitingTask( F f): func_(f) {}
+      ~WaitingTaskExHolder();
 
-      task* execute() override {
-        func_(exceptionPtr());
-        return nullptr;
-      };
+      WaitingTaskExHolder();
 
-    private:
-      F func_;
+      std::exception_ptr const* exceptionPtr() const;
+
+      void dependentTaskFailed(std::exception_ptr);
     };
 
-    template< typename ALLOC, typename F>
-    FunctorWaitingTask<F>* make_waiting_task( ALLOC&& iAlloc, F f) {
-      return new (iAlloc) FunctorWaitingTask<F>(f);
+    template <typename F>
+    class FunctorWaitingTask : public tbb::task, public WaitingTaskExHolder {
+
+      // Data Members
+    private:
+      std::atomic<F*> func_;
+
+      // Special Member Functions
+    public:
+      ~FunctorWaitingTask() override;
+
+      explicit FunctorWaitingTask();
+
+      explicit FunctorWaitingTask(F);
+
+      task* execute() override;
+    };
+
+    // template <typename F>
+    // class FunctorWaitingTask : public WaitingTask {
+    //
+    // private:
+    //
+    //  std::atomic<F*>
+    //  func_;
+    //
+    // public:
+    //
+    //  ~FunctorWaitingTask();
+    //
+    //  explicit
+    //  FunctorWaitingTask(F);
+    //
+    //  task*
+    //  execute() override;
+    //
+    //};
+
+    template <typename F>
+    FunctorWaitingTask<F>::~FunctorWaitingTask()
+    {
+      delete func_.load();
+      func_.store(nullptr);
+    }
+
+    template <typename F>
+    FunctorWaitingTask<F>::FunctorWaitingTask()
+    {
+      func_ = nullptr;
+    }
+
+    template <typename F>
+    FunctorWaitingTask<F>::FunctorWaitingTask(F f)
+    {
+      func_ = new F(f);
+    }
+
+    template <typename F>
+    tbb::task*
+    FunctorWaitingTask<F>::execute()
+    {
+      auto p = exceptionPtr();
+      auto theFunc = func_.load();
+      theFunc->operator()(p);
+      return nullptr;
+    }
+
+    template <typename ALLOC, typename F>
+    tbb::task*
+    make_waiting_task(ALLOC&& iAlloc, F f)
+    {
+      auto ret = new (iAlloc) FunctorWaitingTask<F>(f);
+      return ret;
     }
 
   } // concurrency
