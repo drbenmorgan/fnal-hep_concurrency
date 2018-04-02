@@ -20,7 +20,8 @@ namespace hep {
       // Static Member Data
     private:
       static std::mutex* heldMutex_;
-      static std::map<long const, std::vector<RecursiveMutex*>>* held_;
+      using held_map_t = std::map<pthread_t, std::vector<RecursiveMutex*>>;
+      static held_map_t* held_;
 
       // Static Member Functions
     public:
@@ -58,7 +59,7 @@ namespace hep {
       std::mutex mutex_;
 
       // The tid of the thread that locked mutex_.
-      long owner_;
+      pthread_t owner_;
 
       // Used to allow recursive locking of mutex_, but we only lock/unlock it
       // once.

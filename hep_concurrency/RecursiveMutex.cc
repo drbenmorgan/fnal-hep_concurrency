@@ -23,14 +23,14 @@ namespace hep {
   namespace concurrency {
 
     mutex* RecursiveMutex::heldMutex_{nullptr};
-    map<long const, vector<RecursiveMutex*>>* RecursiveMutex::held_{nullptr};
+    RecursiveMutex::held_map_t * RecursiveMutex::held_{nullptr};
 
     void
     RecursiveMutex::startup()
     {
       if (heldMutex_ == nullptr) {
         heldMutex_ = new mutex;
-        held_ = new map<long const, vector<RecursiveMutex*>>;
+        held_ = new held_map_t;
       }
     }
 
