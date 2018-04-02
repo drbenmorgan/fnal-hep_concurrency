@@ -9,15 +9,10 @@ namespace hep {
 
     int intentionalDataRace_{0};
 
-    long
+    std::thread::id
     getThreadID()
     {
-      long tid = 0;
-#if defined(__linux__)
-      tid = syscall(SYS_gettid);
-#elif defined(__MACH__) && defined(__APPPLE__)
-      tid = syscall(SYS_thread_selfid);
-#endif
+      std::thread::id const tid = std::this_thread::get_id();
       return tid;
     }
 
