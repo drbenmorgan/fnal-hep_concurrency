@@ -5,14 +5,7 @@
 #include <cstdlib>
 #include <iostream>
 #include <sstream>
-
-#ifdef __cplusplus
-extern "C" {
-#endif
-#include <pthread.h>
-#ifdef __cplusplus
-}
-#endif
+#include <thread>
 
 #if defined(__SANITIZE_THREAD__)
 #define ANNOTATE_HAPPENS_BEFORE(addr)                                          \
@@ -79,7 +72,7 @@ namespace hep {
   namespace concurrency {
 
     extern int intentionalDataRace_;
-    pthread_t getThreadID();
+    std::thread::id getThreadID();
     unsigned long long getTSC();
     unsigned long long getTSCP(unsigned& cpuidx);
 

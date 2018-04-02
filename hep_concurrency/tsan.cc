@@ -9,10 +9,10 @@ namespace hep {
 
     int intentionalDataRace_{0};
 
-    pthread_t
+    std::thread::id
     getThreadID()
     {
-      pthread_t const tid = pthread_self();
+      std::thread::id const tid = std::this_thread::get_id();
       return tid;
     }
 

@@ -19,6 +19,10 @@
 
 using namespace std;
 
+namespace {
+  std::thread::id const default_thread_id;
+}
+
 namespace hep {
   namespace concurrency {
 
@@ -57,7 +61,7 @@ namespace hep {
     }
 
     RecursiveMutex::RecursiveMutex(std::string const& name /* = "" */)
-      : owner_{0}, lockCount_{0}, name_{name}
+      : owner_{default_thread_id}, lockCount_{0}, name_{name}
     {}
 
     void
@@ -73,7 +77,7 @@ namespace hep {
       cvLock.lock();
       cv_.wait(cvLock, [this, tid] {
         // Wait until either unowned, or I am the owner.
-        if ((owner_ != 0) && (owner_ != tid)) {
+          if ((owner_ != default_thread_id) && (owner_ != tid)) {
           return false;
         }
         return true;
@@ -139,9 +143,9 @@ namespace hep {
       unsigned tsc_end_cpuidx = tsc_begin_cpuidx;
       auto tsc_end = getTSCP(tsc_end_cpuidx);
       auto tid = getThreadID();
-      if ((owner_ == 0) || (owner_ != tid)) {
+      if ((owner_ == default_thread_id) || (owner_ != tid)) {
         // Either the mutex is unowned or is not owned by us, error.
-        if (owner_ == 0) {
+        if (owner_ == default_thread_id) {
           cerr << "Aborting on attempt to unlock the mutex when it is not "
                   "owned! tid: "
                << tid << "\n";
@@ -157,7 +161,7 @@ namespace hep {
         if (lockCount_ == 0) {
           lock_guard<mutex> heldSentry{*heldMutex_};
           mutex_.unlock();
-          owner_ = 0;
+          owner_ = default_thread_id;
           auto i = (*held_)[tid].size();
           while (i != 0) {
             --i;
