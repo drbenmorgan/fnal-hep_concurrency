@@ -15,10 +15,10 @@ namespace hep {
 
     SerialTaskQueue::~SerialTaskQueue()
     {
-      ANNOTATE_THREAD_IGNORE_WRITES_BEGIN;
-      delete taskQueue_.load();
+      ANNOTATE_THREAD_IGNORE_BEGIN;
+      delete taskQueue_;
       taskQueue_ = nullptr;
-      ANNOTATE_THREAD_IGNORE_WRITES_END;
+      ANNOTATE_THREAD_IGNORE_END;
     }
 
     SerialTaskQueue::SerialTaskQueue()
@@ -31,9 +31,9 @@ namespace hep {
     bool
     SerialTaskQueue::pause()
     {
+      RecursiveMutexSentry sentry{mutex_, __func__};
       auto ret = false;
       {
-        RecursiveMutexSentry sentry{mutex_, __func__};
         ret = (++pauseCount_ == 1);
       }
       return ret;
@@ -42,9 +42,9 @@ namespace hep {
     bool
     SerialTaskQueue::resume()
     {
+      RecursiveMutexSentry sentry{mutex_, __func__};
       bool ret = false;
       {
-        RecursiveMutexSentry sentry{mutex_, __func__};
         if (--pauseCount_ == 0) {
           tbb::task* nt = pickNextTask();
           if (nt != nullptr) {
@@ -59,8 +59,9 @@ namespace hep {
     void
     SerialTaskQueue::pushTask(tbb::task* tsk)
     {
+      RecursiveMutexSentry sentry{mutex_, __func__};
       if (tsk != nullptr) {
-        taskQueue_.load()->push(tsk);
+        taskQueue_->push(tsk);
         tbb::task* nt = pickNextTask();
         if (nt != nullptr) {
           tbb::task::spawn(*nt);
@@ -71,9 +72,9 @@ namespace hep {
     tbb::task*
     SerialTaskQueue::notify()
     {
+      RecursiveMutexSentry sentry{mutex_, __func__};
       tbb::task* ret = nullptr;
       {
-        RecursiveMutexSentry sentry{mutex_, __func__};
         taskRunning_ = false;
         ret = pickNextTask();
       }
@@ -83,12 +84,14 @@ namespace hep {
     tbb::task*
     SerialTaskQueue::pickNextTask()
     {
+      RecursiveMutexSentry sentry{mutex_, __func__};
       tbb::task* ret = nullptr;
-      if ((pauseCount_.load() == 0) && !taskRunning_.load() &&
-          !taskQueue_.load()->empty()) {
-        ret = taskQueue_.load()->front();
-        taskQueue_.load()->pop();
-        taskRunning_ = true;
+      if ((pauseCount_ == 0) && !taskRunning_) {
+        if (!taskQueue_->empty()) {
+          ret = taskQueue_->front();
+          taskQueue_->pop();
+          taskRunning_ = true;
+        }
       }
       return ret;
     }

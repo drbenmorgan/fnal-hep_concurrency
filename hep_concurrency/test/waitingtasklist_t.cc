@@ -52,6 +52,7 @@ public:
   tearDown()
   {}
 };
+
 #if 0
 namespace {
 

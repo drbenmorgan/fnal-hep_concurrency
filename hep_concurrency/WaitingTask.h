@@ -2,6 +2,7 @@
 #define hep_concurrency_WaitingTask_h
 // vim: set sw=2 expandtab :
 
+#include "hep_concurrency/tsan.h"
 #include "tbb/task.h"
 
 #include <atomic>
@@ -13,95 +14,61 @@ namespace hep {
 
     using WaitingTask = tbb::task;
 
-    // Used for hiding the FunctorWaitingTask ctor vptr adjustment.
-    extern std::atomic<bool> functorWaitingTaskExternalSync_;
-
-    // Used for hiding the FunctorWaitingTask ctor vptr adjustment.
-    inline void
-    functorWaitingTaskStartSync()
-    {
-      // functorWaitingTaskExternalSync_.store(true, std::memory_order_release);
-    }
-
-    // Used for hiding the FunctorWaitingTask ctor vptr adjustment.
-    inline void
-    functorWaitingTaskFinishSync()
-    {
-      // functorWaitingTaskExternalSync_.load(std::memory_order_acquire);
-    }
-
     class WaitingTaskExHolder {
+    private: // Data Members
+      std::atomic<std::exception_ptr*> ptr_;
 
-      // Data Members
-    private:
-      std::atomic<std::exception_ptr*> m_ptr;
-
-      // Special Member Functions
-    public:
+    public: // Special Member Functions
       ~WaitingTaskExHolder();
-
       WaitingTaskExHolder();
 
+    public: // API
       std::exception_ptr const* exceptionPtr() const;
-
       void dependentTaskFailed(std::exception_ptr);
     };
 
     template <typename F>
     class FunctorWaitingTask : public tbb::task, public WaitingTaskExHolder {
-
-      // Data Members
-    private:
+    private: // Data Members
       std::atomic<F*> func_;
 
-      // Special Member Functions
-    public:
+    public: // Special Member Functions
       ~FunctorWaitingTask() override;
-
       explicit FunctorWaitingTask();
-
       explicit FunctorWaitingTask(F);
 
+    public: // API required by tbb::task
       task* execute() override;
     };
-
-    // template <typename F>
-    // class FunctorWaitingTask : public WaitingTask {
-    //
-    // private:
-    //
-    //  std::atomic<F*>
-    //  func_;
-    //
-    // public:
-    //
-    //  ~FunctorWaitingTask();
-    //
-    //  explicit
-    //  FunctorWaitingTask(F);
-    //
-    //  task*
-    //  execute() override;
-    //
-    //};
 
     template <typename F>
     FunctorWaitingTask<F>::~FunctorWaitingTask()
     {
+      ANNOTATE_BENIGN_RACE_SIZED(reinterpret_cast<char*>(&tbb::task::self()) -
+                                   sizeof(tbb::internal::task_prefix),
+                                 sizeof(tbb::task) +
+                                   sizeof(tbb::internal::task_prefix),
+                                 "tbb::task");
+      ANNOTATE_THREAD_IGNORE_BEGIN;
       delete func_.load();
-      func_.store(nullptr);
+      func_ = nullptr;
+      ANNOTATE_THREAD_IGNORE_END;
     }
 
     template <typename F>
     FunctorWaitingTask<F>::FunctorWaitingTask()
     {
+      ANNOTATE_THREAD_IGNORE_BEGIN;
       func_ = nullptr;
+      ANNOTATE_THREAD_IGNORE_END;
     }
 
     template <typename F>
     FunctorWaitingTask<F>::FunctorWaitingTask(F f)
     {
+      ANNOTATE_THREAD_IGNORE_BEGIN;
       func_ = new F(f);
+      ANNOTATE_THREAD_IGNORE_END;
     }
 
     template <typename F>
@@ -118,7 +85,9 @@ namespace hep {
     tbb::task*
     make_waiting_task(ALLOC&& iAlloc, F f)
     {
+      ANNOTATE_THREAD_IGNORE_BEGIN;
       auto ret = new (iAlloc) FunctorWaitingTask<F>(f);
+      ANNOTATE_THREAD_IGNORE_END;
       return ret;
     }
 

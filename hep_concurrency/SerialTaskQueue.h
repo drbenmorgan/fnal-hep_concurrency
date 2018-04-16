@@ -16,40 +16,38 @@ namespace hep {
 
     template <typename T>
     class QueuedTask final : public tbb::task {
-    private:
+    private: // DATA MEMBERS
       // Used to call notify() when the functor returns.
       std::atomic<SerialTaskQueue*> queue_;
       // The functor we are going to run later.
       std::atomic<T*> func_;
 
-    private:
-      tbb::task* execute() override;
-
-    public:
+    public: // Special Member Functions
       virtual ~QueuedTask();
       QueuedTask(SerialTaskQueue*, T const& func);
+
+    private: // API -- required by tbb::task
+      tbb::task* execute() override;
     };
 
     class SerialTaskQueue final {
-      // Data Members
-    private:
-      // Protects all data members
+    private: // Data Members
       hep::concurrency::RecursiveMutex mutex_{"SerialTaskQueue::mutex_"};
-      std::atomic<std::queue<tbb::task*>*> taskQueue_;
-      std::atomic<unsigned long> pauseCount_;
-      std::atomic<bool> taskRunning_;
-      // Implementation Details
-    private:
+      std::queue<tbb::task*>* taskQueue_;
+      unsigned long pauseCount_;
+      bool taskRunning_;
+
+    private: // Implementation Details
       void pushTask(tbb::task*);
       tbb::task* pickNextTask();
-      // Special Member Functions
-    public:
+
+    public: // Special Member Functions
       ~SerialTaskQueue();
       SerialTaskQueue();
       SerialTaskQueue(SerialTaskQueue const&) = delete;
       SerialTaskQueue& operator=(SerialTaskQueue const&) = delete;
-      // API
-    public:
+
+    public: // API
       bool pause();
       bool resume();
       template <typename T>
@@ -61,11 +59,16 @@ namespace hep {
     template <typename T>
     QueuedTask<T>::~QueuedTask()
     {
-      ANNOTATE_THREAD_IGNORE_WRITES_BEGIN;
+      ANNOTATE_BENIGN_RACE_SIZED(reinterpret_cast<char*>(&tbb::task::self()) -
+                                   sizeof(tbb::internal::task_prefix),
+                                 sizeof(tbb::task) +
+                                   sizeof(tbb::internal::task_prefix),
+                                 "tbb::task");
+      ANNOTATE_THREAD_IGNORE_BEGIN;
       queue_ = nullptr;
       delete func_.load();
       func_ = nullptr;
-      ANNOTATE_THREAD_IGNORE_WRITES_END;
+      ANNOTATE_THREAD_IGNORE_END;
     }
 
     template <typename T>
@@ -96,12 +99,11 @@ namespace hep {
     void
     SerialTaskQueue::push(const T& func)
     {
-      {
-        hep::concurrency::RecursiveMutexSentry sentry{mutex_, __func__};
-        tbb::task* p =
-          new (tbb::task::allocate_root()) QueuedTask<T>{this, func};
-        pushTask(p);
-      }
+      hep::concurrency::RecursiveMutexSentry sentry{mutex_, __func__};
+      ANNOTATE_THREAD_IGNORE_BEGIN;
+      tbb::task* p = new (tbb::task::allocate_root()) QueuedTask<T>{this, func};
+      ANNOTATE_THREAD_IGNORE_END;
+      pushTask(p);
     }
 
   } // namespace concurrency

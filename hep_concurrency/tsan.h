@@ -2,6 +2,7 @@
 #define hep_concurrency_tsan_h
 // vim: set sw=2 expandtab :
 
+#include <cstdint>
 #include <cstdlib>
 #include <iostream>
 #include <sstream>
@@ -32,11 +33,29 @@
 #define ANNOTATE_THREAD_IGNORE_BEGIN                                           \
   ANNOTATE_THREAD_IGNORE_READS_BEGIN;                                          \
   ANNOTATE_THREAD_IGNORE_WRITES_BEGIN;                                         \
-  ANNOTATE_THREAD_IGNORE_SYNC_BEGIN
+  ANNOTATE_THREAD_IGNORE_SYNC_BEGIN;                                           \
+  if (getenv("ART_DEBUG_IGNORE") != nullptr) {                                 \
+    ++hep::concurrency::ignoreBalance_;                                        \
+    std::ostringstream msg;                                                    \
+    msg << "-----> tid: " << hep::concurrency::getThreadID() << " "            \
+        << hep::concurrency::ignoreBalance_                                    \
+        << " ANNOTATE_THREAD_IGNORE_BEGIN: " << __FILE__ << ":" << __LINE__    \
+        << " " << __func__ << "\n";                                            \
+    std::cerr << msg.str();                                                    \
+  }
 #define ANNOTATE_THREAD_IGNORE_END                                             \
   ANNOTATE_THREAD_IGNORE_READS_END;                                            \
   ANNOTATE_THREAD_IGNORE_WRITES_END;                                           \
-  ANNOTATE_THREAD_IGNORE_SYNC_END
+  ANNOTATE_THREAD_IGNORE_SYNC_END;                                             \
+  if (getenv("ART_DEBUG_IGNORE") != nullptr) {                                 \
+    --hep::concurrency::ignoreBalance_;                                        \
+    std::ostringstream msg;                                                    \
+    msg << "-----> tid: " << hep::concurrency::getThreadID() << " "            \
+        << hep::concurrency::ignoreBalance_                                    \
+        << " ANNOTATE_THREAD_IGNORE_END:   " << __FILE__ << ":" << __LINE__    \
+        << " " << __func__ << "\n";                                            \
+    std::cerr << msg.str();                                                    \
+  }
 extern "C" {
 void AnnotateHappensBefore(const char*, int, void*);
 void AnnotateHappensAfter(const char*, int, void*);
@@ -72,7 +91,9 @@ namespace hep {
   namespace concurrency {
 
     extern int intentionalDataRace_;
-    std::thread::id getThreadID();
+    extern thread_local int ignoreBalance_;
+    // std::thread::id getThreadID();
+    std::uint64_t getThreadID();
     unsigned long long getTSC();
     unsigned long long getTSCP(unsigned& cpuidx);
 
@@ -82,13 +103,16 @@ namespace hep {
 #define INTENTIONAL_DATA_RACE(ENV_VAR)                                         \
   {                                                                            \
     if (std::getenv(#ENV_VAR)) {                                               \
-      std::ostringstream buf;                                                  \
-      buf << "-----> Making data race " #ENV_VAR " "                           \
-          << "tid: " << hep::concurrency::getThreadID() << " " << __FILE__     \
-          << ":" << __LINE__ << "\n";                                          \
+      if (getenv("ART_DEBUG_DR") != nullptr) {                                 \
+        std::ostringstream buf;                                                \
+        buf << "-----> Making data race " #ENV_VAR " "                         \
+            << "tid: " << hep::concurrency::getThreadID() << " "               \
+            << hep::concurrency::ignoreBalance_ << " " << __FILE__ << ":"      \
+            << __LINE__ << "\n";                                               \
+        std::cerr << buf.str();                                                \
+      }                                                                        \
       hep::concurrency::intentionalDataRace_ =                                 \
         hep::concurrency::intentionalDataRace_ + 1;                            \
-      std::cerr << buf.str();                                                  \
     }                                                                          \
   }
 

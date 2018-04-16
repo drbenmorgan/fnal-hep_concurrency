@@ -3,6 +3,7 @@
 
 #include <atomic>
 #include <condition_variable>
+#include <cstdint>
 #include <cstdlib>
 #include <exception>
 #include <iomanip>
@@ -12,41 +13,46 @@
 #include <set>
 #include <sstream>
 #include <string>
+#include <thread>
 #include <vector>
 
-#include <sys/syscall.h>
-#include <unistd.h>
+//#include <sys/syscall.h>
+//#include <unistd.h>
 
 using namespace std;
-
-namespace {
-  std::thread::id const default_thread_id;
-}
 
 namespace hep {
   namespace concurrency {
 
+    // namespace {
+    //  thread::id const default_thread_id;
+    //} // unnamed namespace
+
     mutex* RecursiveMutex::heldMutex_{nullptr};
-    RecursiveMutex::held_map_t * RecursiveMutex::held_{nullptr};
+    // map<thread::id const, vector<RecursiveMutex*>>*
+    // RecursiveMutex::held_{nullptr};
+    map<uint64_t const, vector<RecursiveMutex*>>* RecursiveMutex::held_{
+      nullptr};
 
     void
     RecursiveMutex::startup()
     {
       if (heldMutex_ == nullptr) {
         heldMutex_ = new mutex;
-        held_ = new held_map_t;
+        // held_ = new map<thread::id const, vector<RecursiveMutex*>>;
+        held_ = new map<uint64_t const, vector<RecursiveMutex*>>;
       }
     }
 
     void
     RecursiveMutex::shutdown()
     {
-      ANNOTATE_THREAD_IGNORE_WRITES_BEGIN;
+      ANNOTATE_THREAD_IGNORE_BEGIN;
       delete held_;
       held_ = nullptr;
       delete heldMutex_;
       heldMutex_ = nullptr;
-      ANNOTATE_THREAD_IGNORE_WRITES_END;
+      ANNOTATE_THREAD_IGNORE_END;
     }
 
     struct RecursiveMutexCleaner {
@@ -54,14 +60,11 @@ namespace hep {
       RecursiveMutexCleaner() { RecursiveMutex::startup(); }
     } recursiveMutexCleaner_;
 
-    RecursiveMutex::~RecursiveMutex()
-    {
-      // ANNOTATE_THREAD_IGNORE_WRITES_BEGIN;
-      // ANNOTATE_THREAD_IGNORE_WRITES_END;
-    }
+    RecursiveMutex::~RecursiveMutex() {}
 
     RecursiveMutex::RecursiveMutex(std::string const& name /* = "" */)
-      : owner_{default_thread_id}, lockCount_{0}, name_{name}
+      //: owner_{default_thread_id}, lockCount_{0}, name_{name}
+      : owner_{0}, lockCount_{0}, name_{name}
     {}
 
     void
@@ -77,7 +80,8 @@ namespace hep {
       cvLock.lock();
       cv_.wait(cvLock, [this, tid] {
         // Wait until either unowned, or I am the owner.
-          if ((owner_ != default_thread_id) && (owner_ != tid)) {
+        // if ((owner_ != default_thread_id) && (owner_ != tid))
+        if ((owner_ != 0) && (owner_ != tid)) {
           return false;
         }
         return true;
@@ -99,7 +103,7 @@ namespace hep {
               << " " << setw(2) << right << (tsc_begin_cpuidx & 0xFF) << left
               << " " << setw(18) << right << tsc_begin << left << " " << setw(6)
               << right << tid << left << "           "
-              << "RecursiveMutex::lock  :"
+              << " RecursiveMutex::lock  :"
               << " addr: " << hex << &mutex_ << dec << " cnt: " << lockCount_;
           if (tsc_begin_cpuidx == tsc_end_cpuidx) {
             buf << " ticks: " << setw(9) << right << (tsc_end - tsc_begin)
@@ -117,7 +121,7 @@ namespace hep {
             if (first) {
               first = false;
             } else {
-              buf << setw(194) << " ";
+              buf << setw(195) << " ";
             }
             buf << " " << setw(6) << right << tidAndvheld.first << left;
             for (auto val : (*held_)[tidAndvheld.first]) {
@@ -143,9 +147,11 @@ namespace hep {
       unsigned tsc_end_cpuidx = tsc_begin_cpuidx;
       auto tsc_end = getTSCP(tsc_end_cpuidx);
       auto tid = getThreadID();
-      if ((owner_ == default_thread_id) || (owner_ != tid)) {
+      // if ((owner_ == default_thread_id) || (owner_ != tid))
+      if ((owner_ == 0) || (owner_ != tid)) {
         // Either the mutex is unowned or is not owned by us, error.
-        if (owner_ == default_thread_id) {
+        // if (owner_ == default_thread_id)
+        if (owner_ == 0) {
           cerr << "Aborting on attempt to unlock the mutex when it is not "
                   "owned! tid: "
                << tid << "\n";
@@ -161,7 +167,8 @@ namespace hep {
         if (lockCount_ == 0) {
           lock_guard<mutex> heldSentry{*heldMutex_};
           mutex_.unlock();
-          owner_ = default_thread_id;
+          // owner_ = default_thread_id;
+          owner_ = 0;
           auto i = (*held_)[tid].size();
           while (i != 0) {
             --i;
@@ -173,7 +180,7 @@ namespace hep {
                       << " " << setw(2) << right << (tsc_begin_cpuidx & 0xFF)
                       << left << " " << setw(18) << right << tsc_begin << left
                       << " " << setw(6) << right << tid << left << "           "
-                      << "RecursiveMutex::unlock:"
+                      << " RecursiveMutex::unlock:"
                       << " addr: " << hex << &mutex_ << dec
                       << " cnt: " << lockCount_;
                   if (tsc_begin_cpuidx == tsc_end_cpuidx) {
@@ -192,7 +199,7 @@ namespace hep {
                     if (first) {
                       first = false;
                     } else {
-                      buf << setw(194) << " ";
+                      buf << setw(195) << " ";
                     }
                     buf << " " << setw(6) << right << tidAndvheld.first << left;
                     for (auto val : (*held_)[tidAndvheld.first]) {
@@ -226,7 +233,7 @@ namespace hep {
                 << " " << setw(2) << right << (tsc_begin_cpuidx & 0xFF) << left
                 << " " << setw(18) << right << tsc_begin << left << " "
                 << setw(6) << right << tid << left << "           "
-                << "RecursiveMutex::unlock:"
+                << " RecursiveMutex::unlock:"
                 << " addr: " << hex << &mutex_ << dec << " cnt: " << lockCount_;
             if (tsc_begin_cpuidx == tsc_end_cpuidx) {
               buf << " ticks: " << setw(9) << right << (tsc_end - tsc_begin)
@@ -244,7 +251,7 @@ namespace hep {
               if (first) {
                 first = false;
               } else {
-                buf << setw(194) << " ";
+                buf << setw(195) << " ";
               }
               buf << " " << setw(6) << right << tidAndvheld.first << left;
               for (auto val : (*held_)[tidAndvheld.first]) {
@@ -268,12 +275,10 @@ namespace hep {
 
     RecursiveMutexSentry::~RecursiveMutexSentry()
     {
-      ANNOTATE_THREAD_IGNORE_WRITES_BEGIN;
       mutex_->unlock(*name_);
       delete name_;
       name_ = nullptr;
       mutex_ = nullptr;
-      ANNOTATE_THREAD_IGNORE_WRITES_END;
     }
 
     RecursiveMutexSentry::RecursiveMutexSentry(RecursiveMutex& mutex,
