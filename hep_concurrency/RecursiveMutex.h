@@ -6,7 +6,6 @@
 
 #include <atomic>
 #include <condition_variable>
-#include <cstdint>
 #include <map>
 #include <mutex>
 #include <set>
@@ -18,18 +17,20 @@ namespace hep {
   namespace concurrency {
 
     class RecursiveMutex {
+    private:  // Static Member Data
 
-    private: // Static Member Data
       static std::mutex* heldMutex_;
+      using held_map_t = std::map<std::thread::id, std::vector<RecursiveMutex*>>;
+      static held_map_t* held_;
 
-      // static std::map<std::thread::id const, std::vector<RecursiveMutex*>>*
-      static std::map<std::uint64_t const, std::vector<RecursiveMutex*>>* held_;
-
-    public: // Static Member Functions
+    public:   // Static Member Functions
       static void startup();
       static void shutdown();
 
-    public: // Special Member Functions
+    private:  // Static Member Functions
+      static bool threadHoldsMutex(long const tid, unsigned long addr);
+
+    public:   // Special Member Functions
       ~RecursiveMutex();
       RecursiveMutex(std::string const& name = "");
       RecursiveMutex(RecursiveMutex const&) = delete;
@@ -53,8 +54,7 @@ namespace hep {
       std::mutex mutex_;
 
       // The tid of the thread that locked mutex_.
-      // std::thread::id owner_;
-      std::uint64_t owner_;
+      std::thread::id owner_;
 
       // Used to allow recursive locking of mutex_, but we only lock/unlock it
       // once.

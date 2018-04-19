@@ -2,8 +2,6 @@
 #define hep_concurrency_tsan_h
 // vim: set sw=2 expandtab :
 
-#include <cstdint>
-#include <cstdlib>
 #include <iostream>
 #include <sstream>
 #include <thread>
@@ -92,8 +90,7 @@ namespace hep {
 
     extern int intentionalDataRace_;
     extern thread_local int ignoreBalance_;
-    // std::thread::id getThreadID();
-    std::uint64_t getThreadID();
+    std::thread::id getThreadID();
     unsigned long long getTSC();
     unsigned long long getTSCP(unsigned& cpuidx);
 
