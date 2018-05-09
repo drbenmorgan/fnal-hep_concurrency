@@ -110,3 +110,7 @@ namespace hep {
 } // namespace hep
 
 #endif /* hep_concurrency_SerialTaskQueue_h */
+
+// Local Variables:
+// mode: c++
+// End:

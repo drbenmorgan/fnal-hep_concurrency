@@ -95,3 +95,7 @@ namespace hep {
 } // hep
 
 #endif /* hep_concurrency_WaitingTask_h */
+
+// Local Variables:
+// mode: c++
+// End:

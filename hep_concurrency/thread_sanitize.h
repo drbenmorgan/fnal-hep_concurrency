@@ -88,4 +88,8 @@ namespace hep {
   }
 }
 
-#endif
+#endif /* hep_concurrency_thread_sanitize_h */
+
+// Local Variables:
+// mode: c++
+// End:
