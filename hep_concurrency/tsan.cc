@@ -14,8 +14,8 @@ namespace hep {
     thread::id
     getThreadID()
     {
-     auto tid = this_thread::get_id();
-     return tid;
+      auto tid = this_thread::get_id();
+      return tid;
     }
 
     unsigned long long

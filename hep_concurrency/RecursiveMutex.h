@@ -17,20 +17,20 @@ namespace hep {
   namespace concurrency {
 
     class RecursiveMutex {
-    private:  // Static Member Data
-
+    private: // Static Member Data
       static std::mutex* heldMutex_;
-      using held_map_t = std::map<std::thread::id, std::vector<RecursiveMutex*>>;
+      using held_map_t =
+        std::map<std::thread::id, std::vector<RecursiveMutex*>>;
       static held_map_t* held_;
 
-    public:   // Static Member Functions
+    public: // Static Member Functions
       static void startup();
       static void shutdown();
 
-    private:  // Static Member Functions
+    private: // Static Member Functions
       static bool threadHoldsMutex(long const tid, unsigned long addr);
 
-    public:   // Special Member Functions
+    public: // Special Member Functions
       ~RecursiveMutex();
       RecursiveMutex(std::string const& name = "");
       RecursiveMutex(RecursiveMutex const&) = delete;
