@@ -1,20 +1,27 @@
 add_library(hep_concurrency SHARED
   GCCPrerequisite.h
   Likely.h
+  RecursiveMutex.cc
+  RecursiveMutex.h
   SerialTaskQueue.cc
   SerialTaskQueue.h
+  SerialTaskQueueChain.cc
   SerialTaskQueueChain.h
   SharedResourceNames.cc
   SharedResourceNames.h
   ThreadSafeAddOnlyContainer.h
   ThreadSafeOutputFileStream.cc
   ThreadSafeOutputFileStream.h
+  WaitingTask.cc
   WaitingTask.h
+  WaitingTaskHolder.cc
   WaitingTaskHolder.h
   WaitingTaskList.cc
   WaitingTaskList.h
   hardware_pause.h
   thread_safety_macros.h
+  tsan.cc
+  tsan.h
   )
 target_include_directories(hep_concurrency
   PUBLIC

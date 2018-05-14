@@ -1,3 +1,7 @@
+#if(ALT_CMAKE)
+#  include(altCMakeLists.cmake)
+#  return()
+#endif()
 #include(CetTest)
 
 #set(source_libraries hep_concurrency ${CPPUNIT} ${TBB} pthread)

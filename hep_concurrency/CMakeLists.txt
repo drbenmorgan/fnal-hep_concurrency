@@ -1,6 +1,7 @@
 if(ALT_CMAKE)
   include(altCMakeLists.cmake)
-else()
+  return()
+endif()
 
 set(LIB_NAME ${PROJECT_NAME})
 

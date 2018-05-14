@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.3)
-project(hep_concurrency VERSION 0.1.0)
+project(hep_concurrency VERSION 1.0.0)
 
 # - Cetbuildtools, version2
 find_package(cetbuildtools2 0.2.0 REQUIRED)
