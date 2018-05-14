@@ -218,32 +218,37 @@ stressTest()
   unsigned const countingTick = 1'000U;
   // Note: This is 30,000 ticks == 30 s
   unsigned const maxCountingTicks = 30'000U;
-  auto stressFunctor =
-    [&chain, &waitToStart, &count_stress_tasks, &count_stress]() {
-      ++count_stress_tasks;
-      {
-        auto waitCount = 0U;
-        while (waitToStart.load()) {
-          usleep(countingTick);
-          ++waitCount;
-          if (waitCount > maxCountingTicks) {
-            // We will not wait forever.
-            throw logic_error(
-              "Max counting wait exceeded! waitToStart never became false!");
-          }
+  auto stressFunctor = [nTasks,
+                        &chain,
+                        &waitToStart,
+                        countingTick,
+                        maxCountingTicks,
+                        &count_stress_tasks,
+                        &count_stress]() {
+    ++count_stress_tasks;
+    {
+      auto waitCount = 0U;
+      while (waitToStart.load()) {
+        usleep(countingTick);
+        ++waitCount;
+        if (waitCount > maxCountingTicks) {
+          // We will not wait forever.
+          throw logic_error(
+            "Max counting wait exceeded! waitToStart never became false!");
         }
       }
-      for (unsigned i = 0U; i < nTasks; ++i) {
-        chain.push([&count_stress] { ++count_stress; });
-      }
-    };
+    }
+    for (unsigned i = 0U; i < nTasks; ++i) {
+      chain.push([&count_stress] { ++count_stress; });
+    }
+  };
   for (unsigned index = 10U; index != 0U; --index) {
     waitToStart.store(true);
     count_stress_tasks.store(0U);
     count_stress.store(0U);
     // cerr << "Creating the_thread ..." << endl;
     thread the_thread(
-      [&chain, &waitToStart, &count_stress_tasks, &count_stress]() {
+      [nTasks, &chain, &waitToStart, &count_stress_tasks, &count_stress]() {
         ++count_stress_tasks;
         {
           auto waitCount = 0U;

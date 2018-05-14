@@ -138,11 +138,11 @@ SerialTaskQueue_test::testPause()
         CPPUNIT_ASSERT(count++ == 1);
         pWaitTask->decrement_ref_count();
       });
-      queue.push([&count, pWaitTask] {
+      queue.push([&count, &queue, pWaitTask] {
         CPPUNIT_ASSERT(count++ == 2);
         pWaitTask->decrement_ref_count();
       });
-      queue.push([&count, pWaitTask] {
+      queue.push([&count, &queue, pWaitTask] {
         CPPUNIT_ASSERT(count++ == 3);
         pWaitTask->decrement_ref_count();
       });
@@ -191,7 +191,7 @@ SerialTaskQueue_test::stressTest()
         };
         for (unsigned int i = 0; i < nTasks; ++i) {
           pWaitTask->increment_ref_count();
-          queue.push([&count, pWaitTask] {
+          queue.push([i, &count, pWaitTask] {
             ++count;
             pWaitTask->decrement_ref_count();
           });
@@ -203,7 +203,7 @@ SerialTaskQueue_test::stressTest()
       waitToStart = false;
       for (unsigned int i = 0; i < nTasks; ++i) {
         pWaitTask->increment_ref_count();
-        queue.push([&count, pWaitTask] {
+        queue.push([i, &count, pWaitTask] {
           ++count;
           pWaitTask->decrement_ref_count();
         });

@@ -4,19 +4,25 @@ else()
 
 set(LIB_NAME ${PROJECT_NAME})
 
-cet_make_library(LIBRARY_NAME ${LIB_NAME}
+cet_make_library(
+  LIBRARY_NAME
+    ${LIB_NAME}
   SOURCE
-  SerialTaskQueue.cc
-  SharedResourceNames.cc
-  ThreadSafeOutputFileStream.cc
-  WaitingTaskList.cc
+    RecursiveMutex.cc
+    SerialTaskQueue.cc
+    SerialTaskQueueChain.cc
+    SharedResourceNames.cc
+    ThreadSafeOutputFileStream.cc
+    WaitingTask.cc
+    WaitingTaskHolder.cc
+    WaitingTaskList.cc
+    tsan.cc
   LIBRARIES
-  ${TBB}
-  )
+    ${TBB}
+)
 
 install_headers()
 install_source()
 
 add_subdirectory(test)
 
-endif() # ALT_CMAKE

@@ -1,37 +1,37 @@
 #include "hep_concurrency/ThreadSafeOutputFileStream.h"
+// vim: set sw=2 expandtab :
 
+#include "hep_concurrency/RecursiveMutex.h"
+
+#include <fstream>
 #include <sstream>
+#include <string>
+#include <utility>
+
+using namespace std;
 
 namespace hep {
   namespace concurrency {
 
+    ThreadSafeOutputFileStream::~ThreadSafeOutputFileStream() { file_.close(); }
+
     ThreadSafeOutputFileStream::ThreadSafeOutputFileStream(
-      std::string const& name)
-      : file_{name}
+      string const& filename)
+      : file_{filename}
     {}
 
-    ThreadSafeOutputFileStream::~ThreadSafeOutputFileStream()
+    ThreadSafeOutputFileStream::operator bool() const
     {
-      std::string tmp;
-      while (waitingMessages_.try_pop(tmp)) {
-        file_ << tmp;
-      }
-      file_.close();
+      RecursiveMutexSentry sentry{mutex_, __func__};
+      return static_cast<bool>(file_);
     }
 
     void
-    ThreadSafeOutputFileStream::write(std::string&& msg)
+    ThreadSafeOutputFileStream::write(string&& msg)
     {
-      waitingMessages_.push(std::move(msg));
-      bool expected{false};
-      if (msgBeingLogged_.compare_exchange_strong(expected, true)) {
-        std::string tmp;
-        while (waitingMessages_.try_pop(tmp)) {
-          file_ << tmp;
-        }
-        msgBeingLogged_.store(false);
-      }
+      RecursiveMutexSentry sentry{mutex_, __func__};
+      file_ << forward<string>(msg);
     }
 
-  } // concurrency
-} // hep
+  } // namespace concurrency
+} // namespace hep

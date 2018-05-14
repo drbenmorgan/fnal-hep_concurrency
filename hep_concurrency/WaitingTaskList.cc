@@ -1,171 +1,123 @@
-// -*- C++ -*-
-//
-// Package:     Concurrency
-// Class  :     WaitingTaskList
-//
-// Implementation:
-//     [Notes on implementation]
-//
-// Original Author:  Chris Jones
-//         Created:  Thu Feb 21 13:46:45 CST 2013
-// $Id$
-//
-
-// system include files
-
-// user include files
-#include "tbb/task.h"
-#include <cassert>
-
+// vim: set sw=2 expandtab :
 #include "hep_concurrency/WaitingTaskList.h"
+
+#include "hep_concurrency/RecursiveMutex.h"
+#include "hep_concurrency/WaitingTask.h"
 #include "hep_concurrency/hardware_pause.h"
+#include "hep_concurrency/tsan.h"
+#include "tbb/task.h"
 
-using namespace hep::concurrency;
-//
-// constants, enums and typedefs
-//
+#include <atomic>
+#include <cassert>
+#include <exception>
+#include <queue>
 
-//
-// static data member definitions
-//
+using namespace std;
 
-//
-// constructors and destructor
-//
-WaitingTaskList::WaitingTaskList(unsigned int iInitialSize)
-  : m_head{nullptr}
-  , m_nodeCache{new WaitNode[iInitialSize]}
-  , m_nodeCacheSize{iInitialSize}
-  , m_lastAssignedCacheIndex{0}
-  , m_waiting{true}
-{
-  auto nodeCache = m_nodeCache.get();
-  for (auto it = nodeCache, itEnd = nodeCache + m_nodeCacheSize; it != itEnd;
-       ++it) {
-    it->m_fromCache = true;
-  }
-}
+namespace hep {
+  namespace concurrency {
 
-//
-// member functions
-//
-void
-WaitingTaskList::reset()
-{
-  m_exceptionPtr = std::exception_ptr{};
-  unsigned int nSeenTasks = m_lastAssignedCacheIndex;
-  m_lastAssignedCacheIndex = 0;
-  assert(m_head == nullptr);
-  if (nSeenTasks > m_nodeCacheSize) {
-    // need to expand so next time we don't have to do any
-    // memory requests
-    m_nodeCacheSize = nSeenTasks;
-    m_nodeCache.reset(new WaitNode[nSeenTasks]);
-    auto nodeCache = m_nodeCache.get();
-    for (auto it = nodeCache, itEnd = nodeCache + m_nodeCacheSize; it != itEnd;
-         ++it) {
-      it->m_fromCache = true;
+    WaitingTaskList::~WaitingTaskList()
+    {
+      ANNOTATE_THREAD_IGNORE_WRITES_BEGIN;
+      delete taskQueue_;
+      taskQueue_ = nullptr;
+      delete m_exceptionPtr.load();
+      ANNOTATE_THREAD_IGNORE_WRITES_END;
     }
-  }
-  // this will make sure all cores see the changes
-  m_waiting = true;
-}
 
-WaitingTaskList::WaitNode*
-WaitingTaskList::createNode(WaitingTask* iTask)
-{
-  unsigned int index = m_lastAssignedCacheIndex++;
-
-  WaitNode* returnValue;
-  if (index < m_nodeCacheSize) {
-    returnValue = m_nodeCache.get() + index;
-  } else {
-    returnValue = new WaitNode;
-    returnValue->m_fromCache = false;
-  }
-  returnValue->m_task = iTask;
-  returnValue->m_next = returnValue;
-
-  return returnValue;
-}
-
-void
-WaitingTaskList::add(WaitingTask* iTask)
-{
-  iTask->increment_ref_count();
-  if (!m_waiting) {
-    if (m_exceptionPtr) {
-      iTask->dependentTaskFailed(m_exceptionPtr);
+    WaitingTaskList::WaitingTaskList()
+    {
+      taskQueue_ = new std::queue<tbb::task*>;
+      m_waiting = true;
+      m_exceptionPtr = new exception_ptr;
     }
-    if (0 == iTask->decrement_ref_count()) {
-      tbb::task::spawn(*iTask);
+
+    void
+    WaitingTaskList::reset()
+    {
+      RecursiveMutexSentry sentry{mutex_, __func__};
+      // We should not be reset if there are
+      // any tasks waiting to be run.
+      assert(taskQueue_.load()->empty());
+      m_waiting = true;
+      delete m_exceptionPtr.load();
+      m_exceptionPtr = new exception_ptr;
     }
-  } else {
-    WaitNode* newHead = createNode(iTask);
-    WaitNode* oldHead = m_head.exchange(newHead);
-    newHead->setNextNode(oldHead);
 
-    // For the case where oldHead != nullptr,
-    // even if 'm_waiting' changed, we don't
-    // have to recheck since we beat 'announce()' in
-    // the ordering of 'm_head.exchange' call so iTask
-    // is guaranteed to be in the link list
+    void
+    WaitingTaskList::add(tbb::task* tsk)
+    {
+      if (tsk == nullptr) {
+        assert(tsk != nullptr);
+        return;
+      }
+      RecursiveMutexSentry sentry{mutex_, __func__};
+      tsk->increment_ref_count();
+      if (!m_waiting.load()) {
+        // We are not in waiting mode, we should
+        // run the task immediately.
+        if (*m_exceptionPtr.load()) {
+          // The doneWaiting call that set us running
+          // propagated an exception to us.
+          auto wt = dynamic_cast<WaitingTaskExHolder*>(tsk);
+          if (wt == nullptr) {
+            abort();
+          }
+          wt->dependentTaskFailed(*m_exceptionPtr.load());
+        }
+        if (tsk->decrement_ref_count() == 0) {
+          tbb::task::spawn(*tsk);
+        }
+        // Note: If we did not spawn the task above, then we assume
+        // that the same task is on multiple waiting task lists,
+        // and whichever list decrements the refcount to zero will
+        // be the one that actually spawns it. We actually do this
+        // in the case of the pathsDoneTask, which is in the waiting
+        // list of each path, but is spawned only once, by the the
+        // last path to finish.
+        return;
+      }
+      taskQueue_.load()->push(tsk);
+    }
 
-    if (nullptr == oldHead) {
-      if (!m_waiting) {
-        // if finished waiting right before we did the
-        // exchange our task will not be spawned. Also,
-        // additional threads may be calling add() and swapping
-        // heads and linking us to the new head.
-        // It is safe to call announce from multiple threads
-        announce();
+    void
+    WaitingTaskList::doneWaiting(exception_ptr exc)
+    {
+      // Run all the tasks and propagate an
+      // exception to them.
+      RecursiveMutexSentry sentry{mutex_, __func__};
+      m_waiting = false;
+      delete m_exceptionPtr;
+      m_exceptionPtr = new exception_ptr{exc};
+      runAllTasks();
+    }
+
+    void
+    WaitingTaskList::runAllTasks()
+    {
+      while (!taskQueue_.load()->empty()) {
+        auto tsk = taskQueue_.load()->front();
+        taskQueue_.load()->pop();
+        if (*m_exceptionPtr.load()) {
+          auto wt = dynamic_cast<WaitingTaskExHolder*>(tsk);
+          if (wt == nullptr) {
+            abort();
+          }
+          wt->dependentTaskFailed(*m_exceptionPtr.load());
+        }
+        if (tsk->decrement_ref_count() == 0) {
+          tbb::task::spawn(*tsk);
+        }
+        // Note: If we did not spawn the task above, then we assume
+        // that the same task is on multiple waiting task lists,
+        // and whichever list decrements the refcount to zero will
+        // be the one that actually spawns it. We actually do this
+        // in the case of the pathsDoneTask, which is in the waiting
+        // list of each path, but is spawned only once, by the the
+        // last path to finish.
       }
     }
-  }
-}
 
-void
-WaitingTaskList::announce()
-{
-  // Need a temporary storage since one of these tasks could
-  // cause the next event to start processing which would refill
-  // this waiting list after it has been reset
-  WaitNode* n = m_head.exchange(nullptr);
-  WaitNode* next;
-  while (n) {
-    // it is possible that 'WaitingTaskList::add' is running in a different
-    // thread and we have a new 'head' but the old head has not yet been
-    // attached to the new head (we identify this since 'nextNode' will return
-    // itself).
-    //  In that case we have to wait until the link has been established before
-    //  going on.
-    while (n == (next = n->nextNode())) {
-      hardware_pause();
-    }
-    auto t = n->m_task;
-    // Note: This was a mistake, the operator bool of
-    // m_exceptionPtr will return false if the exception_ptr
-    // contained exception* is the nullptr.  So even if
-    // doneWaiting(exception_ptr()) had been called, we
-    // would not set the exception_ptr* member of the
-    // task.
-    // if(m_exceptionPtr) {
-    t->dependentTaskFailed(m_exceptionPtr);
-    //}
-    if (0 == t->decrement_ref_count()) {
-      tbb::task::spawn(*t);
-    }
-    if (!n->m_fromCache) {
-      delete n;
-    }
-    n = next;
-  }
-}
-
-void
-WaitingTaskList::doneWaiting(std::exception_ptr iPtr)
-{
-  m_exceptionPtr = iPtr;
-  m_waiting = false;
-  announce();
-}
+  } // namespace concurrency
+} // namespace hep
