@@ -18,6 +18,7 @@ using namespace std;
 
 namespace {
   std::thread::id const default_thread_id;
+  bool const debug_mutex{getenv("ART_DEBUG_RECURSIVE_MUTEX") != nullptr};
 }
 
 namespace hep {
@@ -83,7 +84,7 @@ namespace hep {
         if (lockCount_ == 1) {
           (*held_)[tid].push_back(this);
         }
-        if (getenv("ART_DEBUG_RECURSIVE_MUTEX") != nullptr) {
+        if (debug_mutex) {
           ostringstream buf;
           buf << "-----> ";
           // << setw(2) << right << (tsc_begin_cpuidx & 0xFF) << left
@@ -211,7 +212,7 @@ namespace hep {
               break;
             }
           }
-          if (getenv("ART_DEBUG_RECURSIVE_MUTEX") != nullptr) {
+          if (debug_mutex) {
             ostringstream buf;
             buf << "-----> ";
             // << setw(2) << right << (tsc_begin_cpuidx & 0xFF) << left
