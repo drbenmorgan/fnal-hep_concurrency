@@ -7,23 +7,26 @@ fcldir -
 
 # define product/version pairs
 product	version
-cppunit         v1_13_2c
-gcc		v6_4_0		e15
+cppunit         v1_13_2d
 gcc		v7_3_0		e17
+gcc		v8_2_0		e19
 clang           v5_0_1          c2
-tbb             v2018_2a
-cetbuildtools	v7_05_01	-	only_for_build
+clang		v6_0_1		c5
+tbb             v2018_5
+cetbuildtools	v7_06_02	-	only_for_build
 end_product_list
 
 
 # Matrix of qualifiers versus dependent products
 qualifier	cppunit    gcc	clang	tbb        compiler	notes
-e15:debug	e15:debug  -nq-	-	e15:debug	gcc
-e15:prof	e15:prof   -nq-	-	e15:prof	gcc
 e17:debug	e17:debug  -nq-	-	e17:debug	gcc
 e17:prof	e17:prof   -nq-	-	e17:prof	gcc
+e19:debug	e19:debug  -nq-	-	e19:debug	gcc
+e19:prof	e19:prof   -nq-	-	e19:prof	gcc
 c2:debug	c2:debug   -	-nq-	c2:debug	clang
 c2:prof		c2:prof    -	-nq-	c2:prof		clang
+c5:debug	c5:debug   -	-nq-	c5:debug	clang
+c5:prof		c5:prof    -	-nq-	c5:prof		clang
 end_qualifier_list
 
 # Local Variables:
