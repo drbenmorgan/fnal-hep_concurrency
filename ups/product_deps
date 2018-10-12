@@ -13,7 +13,7 @@ gcc		v8_2_0		e19
 clang           v5_0_1          c2
 clang		v7_0_0		c7
 tbb             v2019_1
-cetbuildtools	v7_06_04	-	only_for_build
+cetbuildtools	v7_07_00	-	only_for_build
 end_product_list
 
 
