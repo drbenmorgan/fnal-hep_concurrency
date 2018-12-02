@@ -7,13 +7,13 @@ fcldir -
 
 # define product/version pairs
 product	version
-cppunit         v1_13_2e
+cppunit         v1_14_0
 gcc		v7_3_0		e17
 gcc		v8_2_0		e19
 clang           v5_0_1          c2
 clang		v7_0_0		c7
 tbb             v2019_2
-cetbuildtools	v7_07_02	-	only_for_build
+cetbuildtools	v7_07_03	-	only_for_build
 end_product_list
 
 
