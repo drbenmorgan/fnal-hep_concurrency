@@ -18,17 +18,5 @@ namespace hep {
       return tid;
     }
 
-    unsigned long long
-    getTSC()
-    {
-      return __rdtsc();
-    }
-
-    unsigned long long
-    getTSCP(unsigned& cpuidx)
-    {
-      return __rdtscp(&cpuidx);
-    }
-
   } // namespace concurrency
 } // namespace hep
