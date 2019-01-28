@@ -91,8 +91,6 @@ namespace hep {
     extern int intentionalDataRace_;
     extern thread_local int ignoreBalance_;
     std::thread::id getThreadID();
-    unsigned long long getTSC();
-    unsigned long long getTSCP(unsigned& cpuidx);
 
   } // namespace concurrency
 } // namespace hep
