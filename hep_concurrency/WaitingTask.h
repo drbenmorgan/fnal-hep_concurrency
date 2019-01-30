@@ -1,99 +1,101 @@
 #ifndef hep_concurrency_WaitingTask_h
 #define hep_concurrency_WaitingTask_h
-// -*- C++ -*-
-//
-// Package:     Concurrency
-// Class  :     WaitingTask
-//
-/**\class WaitingTask WaitingTask.h hep_concurrency/WaitingTask.h
+// vim: set sw=2 expandtab :
 
-   Description: Task used by WaitingTaskList.
+#include "hep_concurrency/tsan.h"
+#include "tbb/task.h"
 
-   Usage:
-   Used as a callback to happen after a task has been completed. Includes the ability to hold an exception which has occurred while waiting.
-*/
-//
-// Original Author:  Chris Jones
-//         Created:  Thu Feb 21 13:46:31 CST 2013
-// $Id$
-//
-
-// system include files
 #include <atomic>
 #include <exception>
 #include <memory>
-#include "tbb/task.h"
-
-// user include files
-
-// forward declarations
 
 namespace hep {
   namespace concurrency {
 
-    class WaitingTaskList;
-    class WaitingTaskHolder;
+    using WaitingTask = tbb::task;
 
-    class WaitingTask : public tbb::task {
+    class WaitingTaskExHolder {
+    private: // Data Members
+      std::atomic<std::exception_ptr*> ptr_;
 
-    public:
-      friend class WaitingTaskList;
-      friend class WaitingTaskHolder;
+    public: // Special Member Functions
+      ~WaitingTaskExHolder();
+      WaitingTaskExHolder();
 
-      ///Constructor
-      WaitingTask() : m_ptr{nullptr} {}
-      ~WaitingTask() override {
-        delete m_ptr.load();
-      };
-
-      // ---------- const member functions ---------------------------
-
-      ///Returns exception thrown by dependent task
-      /** If the value is non-null then the dependent task failed.
-       */
-      std::exception_ptr const * exceptionPtr() const {
-        return m_ptr.load();
-      }
-    private:
-
-      ///Called if waited for task failed
-      /**Allows transfer of the exception caused by the dependent task to be
-       * moved to another thread.
-       * This method should only be called by WaitingTaskList
-       */
-      void dependentTaskFailed(std::exception_ptr iPtr) {
-        if (iPtr and not m_ptr) {
-          auto temp = std::make_unique<std::exception_ptr>(iPtr);
-          std::exception_ptr* expected = nullptr;
-          if( m_ptr.compare_exchange_strong(expected, temp.get()) ) {
-            temp.release();
-          }
-        }
-      }
-
-      std::atomic<std::exception_ptr*> m_ptr;
+    public: // API
+      std::exception_ptr const* exceptionPtr() const;
+      void dependentTaskFailed(std::exception_ptr);
     };
 
-    template<typename F>
-    class FunctorWaitingTask : public WaitingTask {
-    public:
-      explicit FunctorWaitingTask( F f): func_(f) {}
+    template <typename F>
+    class FunctorWaitingTask : public tbb::task, public WaitingTaskExHolder {
+    private: // Data Members
+      std::atomic<F*> func_;
 
-      task* execute() override {
-        func_(exceptionPtr());
-        return nullptr;
-      };
+    public: // Special Member Functions
+      ~FunctorWaitingTask() override;
+      explicit FunctorWaitingTask();
+      explicit FunctorWaitingTask(F);
 
-    private:
-      F func_;
+    public: // API required by tbb::task
+      task* execute() override;
     };
 
-    template< typename ALLOC, typename F>
-    FunctorWaitingTask<F>* make_waiting_task( ALLOC&& iAlloc, F f) {
-      return new (iAlloc) FunctorWaitingTask<F>(f);
+    template <typename F>
+    FunctorWaitingTask<F>::~FunctorWaitingTask()
+    {
+      ANNOTATE_BENIGN_RACE_SIZED(reinterpret_cast<char*>(&tbb::task::self()) -
+                                   sizeof(tbb::internal::task_prefix),
+                                 sizeof(tbb::task) +
+                                   sizeof(tbb::internal::task_prefix),
+                                 "tbb::task");
+      ANNOTATE_THREAD_IGNORE_BEGIN;
+      delete func_.load();
+      func_ = nullptr;
+      ANNOTATE_THREAD_IGNORE_END;
+    }
+
+    template <typename F>
+    FunctorWaitingTask<F>::FunctorWaitingTask()
+    {
+      ANNOTATE_THREAD_IGNORE_BEGIN;
+      func_ = nullptr;
+      ANNOTATE_THREAD_IGNORE_END;
+    }
+
+    template <typename F>
+    FunctorWaitingTask<F>::FunctorWaitingTask(F f)
+    {
+      ANNOTATE_THREAD_IGNORE_BEGIN;
+      func_ = new F(f);
+      ANNOTATE_THREAD_IGNORE_END;
+    }
+
+    template <typename F>
+    tbb::task*
+    FunctorWaitingTask<F>::execute()
+    {
+      auto p = exceptionPtr();
+      auto theFunc = func_.load();
+      theFunc->operator()(p);
+      return nullptr;
+    }
+
+    template <typename ALLOC, typename F>
+    tbb::task*
+    make_waiting_task(ALLOC&& iAlloc, F f)
+    {
+      ANNOTATE_THREAD_IGNORE_BEGIN;
+      auto ret = new (iAlloc) FunctorWaitingTask<F>(f);
+      ANNOTATE_THREAD_IGNORE_END;
+      return ret;
     }
 
   } // concurrency
 } // hep
 
 #endif /* hep_concurrency_WaitingTask_h */
+
+// Local Variables:
+// mode: c++
+// End:

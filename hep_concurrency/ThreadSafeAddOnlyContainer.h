@@ -31,7 +31,6 @@ namespace hep {
     template <typename T>
     class ThreadSafeAddOnlyContainer {
     public:
-
       ThreadSafeAddOnlyContainer();
 
       ~ThreadSafeAddOnlyContainer();
@@ -40,18 +39,27 @@ namespace hep {
       T* makeAndHold(Args&&... args);
 
     private:
-
       class Node {
       public:
-
         template <typename... Args>
         Node(Node* iNext, Args&&... args);
-        Node const* next() const { return next_; }
-        void setNext(Node* v) { next_ = v; }
-        T* address() { return &data_; }
+        Node const*
+        next() const
+        {
+          return next_;
+        }
+        void
+        setNext(Node* v)
+        {
+          next_ = v;
+        }
+        T*
+        address()
+        {
+          return &data_;
+        }
 
       private:
-
         Node* next_;
         T data_;
       };
@@ -60,12 +68,13 @@ namespace hep {
     };
 
     template <typename T>
-    ThreadSafeAddOnlyContainer<T>::ThreadSafeAddOnlyContainer() :
-      front_(nullptr) {
-    }
+    ThreadSafeAddOnlyContainer<T>::ThreadSafeAddOnlyContainer()
+      : front_(nullptr)
+    {}
 
     template <typename T>
-    ThreadSafeAddOnlyContainer<T>::~ThreadSafeAddOnlyContainer() {
+    ThreadSafeAddOnlyContainer<T>::~ThreadSafeAddOnlyContainer()
+    {
       Node const* node = front_.load();
       while (node) {
         Node const* next = node->next();
@@ -76,7 +85,9 @@ namespace hep {
 
     template <typename T>
     template <typename... Args>
-    T* ThreadSafeAddOnlyContainer<T>::makeAndHold(Args&&... args) {
+    T*
+    ThreadSafeAddOnlyContainer<T>::makeAndHold(Args&&... args)
+    {
       Node* expected = front_.load();
       Node* newNode = new Node(expected, std::forward<Args>(args)...);
       while (!front_.compare_exchange_strong(expected, newNode)) {
@@ -88,12 +99,15 @@ namespace hep {
 
     template <typename T>
     template <typename... Args>
-    ThreadSafeAddOnlyContainer<T>::Node::Node(Node* iNext, Args&&... args) :
-      next_(iNext),
-      data_(std::forward<Args>(args)...) {
-    }
+    ThreadSafeAddOnlyContainer<T>::Node::Node(Node* iNext, Args&&... args)
+      : next_(iNext), data_(std::forward<Args>(args)...)
+    {}
 
   } // namespace concurrency
 } // namespace hep
 
 #endif /* hep_concurrency_ThreadSafeAddOnlyContainer_h */
+
+// Local Variables:
+// mode: c++
+// End:
