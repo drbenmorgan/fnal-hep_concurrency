@@ -1,1 +1,3 @@
+if(NOT TARGET TBB::tbb)
 find_package(TBB REQUIRED)
+endif()
