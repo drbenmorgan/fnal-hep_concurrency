@@ -12,7 +12,7 @@
 #  make package (builds distribution tarfile)
 # ======================================================================
 
-cmake_minimum_required(VERSION 3.11)
+cmake_minimum_required(VERSION 3.11...3.14 FATAL_ERROR)
 
 # Project information.
 project(hep_concurrency VERSION 1.03.03 LANGUAGES CXX)
